@@ -1,3 +1,4 @@
 .pio
 .vscode/
 firmware.bin
+.DS_Store

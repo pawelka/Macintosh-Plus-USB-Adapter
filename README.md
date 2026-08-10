@@ -87,7 +87,3 @@ This project is inspired by [jjmz/Atari-Quadrature-USB-Mouse-Adapter](https://gi
 
 The USB host code is based on WCH CH554 examples, adapted for this adapter.
 
-## TODO
-
-- Design a PCB.
-- Document the final schematic and connector wiring.
