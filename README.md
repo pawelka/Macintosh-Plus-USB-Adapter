@@ -26,27 +26,34 @@ The firmware targets a WCH CH554 running at 16 MHz.
 
 Configured signal pins:
 
-| CH554 pin | Function |
-| --- | --- |
-| P3.4 | Macintosh keyboard DATA |
-| P1.1 | Macintosh keyboard CLOCK |
-| P1.4 | Mouse X1 quadrature |
-| P1.5 | Mouse X0 quadrature |
-| P1.6 | Mouse Y0 quadrature |
-| P1.7 | Mouse Y1 quadrature |
-| P3.0 | Left mouse button / DB9 pin 6 |
-| P3.3 | Right mouse button / DB9 pin 9 |
-| P3.2 | USB/device status LED, active low |
-| P3.1 | Optional UART0 TX debug output |
+| DB9 pin| CH554 pin | Function |
+| --- | --- | --- |
+| N/A | P3.4 | Macintosh keyboard DATA |
+| N/A | P3.3 | Macintosh keyboard CLOCK |
+| 4 | P1.4 | Mouse X1 quadrature |
+| 5 | P1.1 | Mouse X0 quadrature |
+| 9 | P1.6 | Mouse Y0 quadrature |
+| 8 | P1.7 | Mouse Y1 quadrature |
+| 7 | P1.5 | Mouse button |
+| N/A | P3.2 | USB/device status LED, active low |
+| N/A | P3.1 | Optional UART0 TX debug output |
+| N/A | P3.0 | Optional UART0 RX debug output |
 
 Debug serial, when enabled, is UART0 TX on P3.1 at 9600 8N1.
 
 ## Building
 
-Install PlatformIO, then install the project Python dependency into the PlatformIO Python environment:
+Install PlatformIO, then install the project Python dependency into PlatformIO's Python environment.
+On macOS or Linux:
 
 ```sh
-$PYTHONEXE -m pip install -r requirements-pio.txt
+~/.platformio/penv/bin/python -m pip install -r requirements-pio.txt
+```
+
+On Windows:
+
+```powershell
+& "$env:USERPROFILE\.platformio\penv\Scripts\python.exe" -m pip install -r requirements-pio.txt
 ```
 
 Build the firmware:
@@ -63,7 +70,8 @@ The default upload command converts the Intel HEX output to `firmware.bin`, then
 pio run -t upload
 ```
 
-`ch55xtool.py` requires PyUSB, which is listed in `requirements-pio.txt`.
+`ch55xtool.py` requires PyUSB and a native libusb backend. Both are provided by
+the packages listed in `requirements-pio.txt`.
 
 An alternate `wchisptool` upload command is kept in `platformio.ini` as a commented reference.
 
@@ -86,4 +94,3 @@ To enable logs on UART0 TX P3.1 at 9600 8N1, change the build flag in `platformi
 This project is inspired by [jjmz/Atari-Quadrature-USB-Mouse-Adapter](https://github.com/jjmz/Atari-Quadrature-USB-Mouse-Adapter). The mouse quadrature code and early CH554 programming references were derived from that project.
 
 The USB host code is based on WCH CH554 examples, adapted for this adapter.
-

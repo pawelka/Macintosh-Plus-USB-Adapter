@@ -6,6 +6,8 @@ import argparse
 
 import usb.core
 import usb.util
+import usb.backend.libusb1
+import libusb_package
         
 #======= Some C-like static constants =======
 DFU_ID_VENDOR = 0x4348
@@ -36,7 +38,8 @@ CH55X_IC_REF[0x59] = {'device_name': 'CH559', 'device_flash_size': 61440, 'devic
 #=============================================
 
 def __get_dfu_device(idVendor=DFU_ID_VENDOR, idProduct=DFU_ID_PRODUCT):
-    dev = usb.core.find(idVendor=idVendor, idProduct=idProduct)
+    backend = usb.backend.libusb1.get_backend(find_library=libusb_package.find_library)
+    dev = usb.core.find(backend=backend, idVendor=idVendor, idProduct=idProduct)
     if dev is None:
         return (None, 'NO_DEV_FOUND')
     try:

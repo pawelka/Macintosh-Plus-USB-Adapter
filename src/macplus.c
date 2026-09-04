@@ -68,7 +68,6 @@ typedef struct  {
 
 __bit qmouse_mode;
 __bit neg_mvmt,prev_neg_mvmt;
-__bit main_button_state;
 __bit keyboard_caps_lock;
 
 __idata mouse_params p;
@@ -90,6 +89,8 @@ uint8_t keyboard_prev_modifiers;
 #define KEYBOARD_POLL_TICK  0x08
 #define HID_PRIORITY_KEYBOARD 0
 #define HID_PRIORITY_MOUSE    1
+#define MOUSE_TIMER_HZ      15873UL
+#define TIMER0_RELOAD       ((uint8_t)(256UL - (FREQ_SYS / 12UL / MOUSE_TIMER_HZ)))
 
 #define add_sat255(v,i) { uint8_t s=v+i; if (CY) s=255; v=s; }
 
@@ -125,30 +126,17 @@ void SetHidPriority(uint8_t priority, __code const char *reason)
 }
 
 SBIT(MAC_DATA,0xB0,4);   // P3.4, Macintosh Plus keyboard DATA
-SBIT(MAC_CLOCK,0x90,1);  // P1.1, Macintosh Plus keyboard CLOCK
+SBIT(MAC_CLOCK,0xB0,3);  // P3.3, Macintosh Plus keyboard CLOCK
 
-// UP   -> P1_4
-// DOWN -> P1_5
-// LEFT -> P1_6
-// RGHT -> P1_7
+SBIT(MOUSE_BUTTON,0x90,5); // P1.5, mouse button (DB9 pin 7), active low
+SBIT(LED,0xB0,2);         // P3.2, LED, active low
 
-SBIT(DirU,0x90,4);
-SBIT(DirD,0x90,5);
-SBIT(DirL,0x90,6);
-SBIT(DirR,0x90,7);
-
-
-SBIT(BUTT_R,0xB0,3);		// P3_3 (Right button  - DB9-9)
-SBIT(BUTT_L,0xB0,0);		// P3_0 (Left button   - DB9-6) = Fire 
-SBIT(LED,0xB0,2);		    // P3_2 (LED, active low)
-						    // P3_4 is Macintosh keyboard DATA, DB9-5 is unused on Macintosh Plus
-
-							// Pull-UP : data + buttons => 4,3,0 => 0x19 + TX => 0x1B
-							// OpenC   : data + buttons & LED (2) => 0x19+0x04 => 0x1D
+#define P1_MOUSE_QUAD_MASK 0xD2 // P1.1, P1.4, P1.6, P1.7
+#define P1_MOUSE_ALL_MASK  0xF2 // Quadrature plus button on P1.5
 
 #define INIT_P3 P3        |= 0x1B;  \
-    		    P3_MOD_OC |= 0x15;  \
-    		    P3_DIR_PU |= 0x1B;
+                    P3_MOD_OC = (P3_MOD_OC & ~0x1B) | 0x14;  \
+                    P3_DIR_PU = (P3_DIR_PU & ~0x1B) | 0x1A;
 
 #define USBLED_NO_DEVICE()  { LED = 0; }
 #define USBLED_DEVICE()     { LED = 1; }
@@ -359,11 +347,10 @@ void MacKeyboardInit(void)
 {
 	MAC_CLOCK = 1;
 	MAC_DATA = 1;
-	P3 |= 0x10;
+	P3 |= 0x18;
 	P3_MOD_OC |= 0x10;
-	P3_DIR_PU |= 0x10;
-	P1 |= 0x02;
-	P1_DIR_PU |= 0x02;
+	P3_MOD_OC &= ~0x08;
+	P3_DIR_PU |= 0x18;
 }
 
 void MacDataRelease(void)
@@ -479,11 +466,7 @@ uint8_t PollMouseHID(void)
 			}
 			mouse_prev_buttons = i;
 
-			if (i&1) {BUTT_L=0;main_button_state=0;} else {BUTT_L=1;main_button_state=1;}
-
-			if (i&1) P1_DIR_PU |= 0x0F0;
-
-			if (i&2) BUTT_R=0; else BUTT_R=1;
+			MOUSE_BUTTON = (i & 1) ? 0 : 1;
 			EA=0;
 
 			sval=RxBuffer[1];
@@ -548,9 +531,6 @@ uint8_t PollHIDByPriority(void)
 
 void MacInquiry(void)
 {
-	if (MacKeybufIsEmpty()) {
-		PollHIDByPriority();
-	}
 	MacSendKey(MacPopKey());
 }
 
@@ -563,6 +543,9 @@ uint8_t MacReadCommandIfPending(uint8_t *cmd)
 	mDelayuS(20);
 	if (MacReadData()) return 0;
 
+	// Prefer stable keyboard timing after a key event. While the mouse is the
+	// active HID device, leave Timer0 running so quadrature pulses are not lost.
+	if (hid_priority == HID_PRIORITY_KEYBOARD) EA = 0;
 	mDelayuS(MAC_CMD_START_US);
 	*cmd = MacReadByte();
 	timeout = 1000;
@@ -591,9 +574,10 @@ void MacKeyboardTask(void)
 			MacSendByte(MAC_TEST_RESPONSE);
 			break;
 	}
+	EA = 1;
 }
 
-//              P1.  4   5   6   7
+//              P1.  4   1   6   7
 // Mouse output 	X1 	X0 	Y0 	Y1
 
 // If needed - logic analyser - time spent in Timer Interrupt
@@ -617,7 +601,7 @@ void Timer0_ISR(void) __interrupt (INT_NO_TMR0) __using(1) {
 			cpl	ACC.0
 00001$:
 			rrc	A
-			mov	0x95,c
+			mov	0x91,c
 			rrc	A
 			mov	0x94,c
 		  __endasm;
@@ -656,11 +640,11 @@ void main( )
 	// Port 3 initialisation - depends on Hardware Version
 	INIT_P3;
 	MacKeyboardInit();
+	MAC_CLOCK = 0; // Hold the keyboard clock low during the startup reset pulse
 
-    P1 &= 0x0D;			// Was 0x0F - added P1.1 low for Reset Kdb
-    P1_MOD_OC &= 0x0D; // P1.4,5,6,7 Push-Pull
-	P1_DIR_PU &= 0x0F; // Initially P1.[47] will be inputs
-    P1_DIR_PU |= 0x02; // Only P1.1 is output
+    P1 |= P1_MOUSE_ALL_MASK; // Release the active-low button; idle quadrature high
+    P1_MOD_OC = (P1_MOD_OC & ~P1_MOUSE_ALL_MASK) | 0x20;
+    P1_DIR_PU = (P1_DIR_PU & ~P1_MOUSE_ALL_MASK) | 0x20;
 
     mDelaymS(50);
 
@@ -670,12 +654,12 @@ void main( )
     printstr( "Start @ChipID=");printhex2(CHIP_ID);printlf();
 #endif
 
-    T2MOD &= 0xEF;				// BT0_CLK = Fsys/12 (1333333Hz)
-    TMOD = TMOD & 0xF0 | 0x02; 	// Timer 0 mode 1
-    TH0 = 172; TR0 = 1;		// 1333333/84 -> 15873 Hz
+    T2MOD &= 0xEF;				// Timer0 clock = Fsys/12
+	TMOD = TMOD & 0xF0 | 0x02; 	// Timer0 mode 2, 8-bit auto-reload
+	TH0 = TIMER0_RELOAD; TR0 = 1;
     ET0=1;
-	P1 |= 0x02;					// Reset KBD
-    EA=1;
+	MAC_CLOCK = 1; // End keyboard reset pulse on P3.3
+	EA=1;
 
     InitUSB_Host( );
     FoundNewDev = 0;
@@ -710,10 +694,9 @@ again:
 				DBG_STATE("usb disconnect");
 				USBLED_NO_DEVICE();
 				qmouse_mode=0;     
-				P1_DIR_PU &= 0x0F; 		// No dev -> P1.[4-7] are inputs
-				P1_DIR_PU |= 0x02;
+				P1_DIR_PU &= ~P1_MOUSE_QUAD_MASK;
 				MacKeyboardInit();
-				main_button_state=1;
+				MOUSE_BUTTON=1;
 				SetHidPriority(HID_PRIORITY_KEYBOARD, "discon");
 				mouse_prev_buttons = 0;
 			}
@@ -748,7 +731,7 @@ again:
 	                PRINT({printx2(p.minf); printx2(p.maxf); printlf();})
 
 					qmouse_mode=1;
-					P1_DIR_PU |= 0x0F0; 		// P1.[4-7] are now push-pull outputs
+					P1_DIR_PU |= P1_MOUSE_QUAD_MASK;
 				}
 
 				if ( ThisUsbDev.DeviceTypes & DEV_HAS_KEYBOARD )
@@ -760,17 +743,13 @@ again:
 					memset(mac_key_down,0,sizeof(mac_key_down));
 					if (!(ThisUsbDev.DeviceTypes & DEV_HAS_MOUSE)) {
 							qmouse_mode=0;
-							P1_DIR_PU &= 0x0F;
-							P1_DIR_PU |= 0x02;
+							P1_DIR_PU &= ~P1_MOUSE_QUAD_MASK;
 							MacKeyboardInit();
 					}
 				}
 
 			}
         }
-
-		if (main_button_state && !(BUTT_L)) P1_DIR_PU &=0x0F;
-
 
 // pollHIDdevice ?
 		if (timer&KEYBOARD_POLL_TICK)		// 15874/8 -> ~2kHz (0.5ms)
