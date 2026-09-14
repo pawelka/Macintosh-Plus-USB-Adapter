@@ -125,8 +125,8 @@ void SetHidPriority(uint8_t priority, __code const char *reason)
 	hid_priority = priority;
 }
 
-SBIT(MAC_DATA,0xB0,4);   // P3.4, Macintosh Plus keyboard DATA
-SBIT(MAC_CLOCK,0xB0,3);  // P3.3, Macintosh Plus keyboard CLOCK
+SBIT(MAC_DATA,0xB0,3);   // P3.3, Macintosh Plus keyboard DATA
+SBIT(MAC_CLOCK,0xB0,4);  // P3.4, Macintosh Plus keyboard CLOCK
 
 SBIT(MOUSE_BUTTON,0x90,5); // P1.5, mouse button (DB9 pin 7), active low
 SBIT(LED,0xB0,2);         // P3.2, LED, active low
@@ -135,7 +135,7 @@ SBIT(LED,0xB0,2);         // P3.2, LED, active low
 #define P1_MOUSE_ALL_MASK  0xF2 // Quadrature plus button on P1.5
 
 #define INIT_P3 P3        |= 0x1B;  \
-                    P3_MOD_OC = (P3_MOD_OC & ~0x1B) | 0x14;  \
+                    P3_MOD_OC = (P3_MOD_OC & ~0x1B) | 0x0C;  \
                     P3_DIR_PU = (P3_DIR_PU & ~0x1B) | 0x1A;
 
 #define USBLED_NO_DEVICE()  { LED = 0; }
@@ -348,8 +348,8 @@ void MacKeyboardInit(void)
 	MAC_CLOCK = 1;
 	MAC_DATA = 1;
 	P3 |= 0x18;
-	P3_MOD_OC |= 0x10;
-	P3_MOD_OC &= ~0x08;
+	P3_MOD_OC |= 0x08;  // DATA on P3.3: open-drain
+	P3_MOD_OC &= ~0x10; // CLOCK on P3.4: push-pull
 	P3_DIR_PU |= 0x18;
 }
 
@@ -658,7 +658,7 @@ void main( )
 	TMOD = TMOD & 0xF0 | 0x02; 	// Timer0 mode 2, 8-bit auto-reload
 	TH0 = TIMER0_RELOAD; TR0 = 1;
     ET0=1;
-	MAC_CLOCK = 1; // End keyboard reset pulse on P3.3
+	MAC_CLOCK = 1; // End keyboard reset pulse on P3.4
 	EA=1;
 
     InitUSB_Host( );

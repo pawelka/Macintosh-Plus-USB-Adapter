@@ -28,8 +28,8 @@ Configured signal pins:
 
 | DB9 pin| CH554 pin | Function |
 | --- | --- | --- |
-| N/A | P3.4 | Macintosh keyboard DATA |
-| N/A | P3.3 | Macintosh keyboard CLOCK |
+| N/A | P3.3 | Macintosh keyboard DATA |
+| N/A | P3.4 | Macintosh keyboard CLOCK |
 | 4 | P1.4 | Mouse X1 quadrature |
 | 5 | P1.1 | Mouse X0 quadrature |
 | 9 | P1.6 | Mouse Y0 quadrature |
